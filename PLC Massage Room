@@ -1,0 +1,217 @@
+substitutions:
+  name: "plc-massage-room"
+  friendly_name: "PLC Massage Room"
+
+globals:
+  - id: halogenerator_active
+    type: bool
+    initial_value: 'false'
+
+esphome:
+  name: "${name}"
+  friendly_name: "${friendly_name}"
+  name_add_mac_suffix: true
+
+esp32:
+  board: esp32-poe
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  level: VERBOSE
+  
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "xzk+asd/cYwCoIog7/gxSNumfTcQBQ="
+
+ota:
+  password: "sfafsdaf"
+
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk_mode: GPIO17_OUT
+  phy_addr: 0
+  power_pin: GPIO12
+    
+  manual_ip:
+    static_ip: 192.168.20.130
+    gateway: 192.168.20.1
+    subnet: 255.255.255.0
+
+web_server:
+  port: 80
+
+
+
+button:
+  - platform: restart
+    name: "${name} Restart"
+
+  - platform: template
+    name: "Halogenerator Button"
+    id: halogenerator_button
+    on_press:
+      then:
+      - logger.log: "Halo button has benn pressed"
+      - servo.write:
+          id: but
+          level: 80.0%
+      - delay: 0.3s
+      - servo.write:
+          id: but
+          level: 50.0%
+
+text_sensor:
+  - platform: ethernet_info
+    ip_address:
+      name: "IP Address"
+  - platform: version
+    name: "ESPHome Version"
+
+
+
+
+
+## BINARY SENSORS
+binary_sensor:
+
+  - platform: gpio
+    pin:
+      number: 0
+      mode:
+        input: true
+        pullup: true
+    id: sw_1
+    name: SW 1
+    device_class: OPENING
+    internal: true
+    on_press:
+      then:
+        - light.toggle:
+            id: massage_room_secondary
+
+  - platform: gpio
+    pin:
+      number: 1
+      mode:
+        input: true
+        pullup: true
+    id: sw_2
+    name: Sw 2
+    filters:
+      - invert:
+    on_multi_click:
+    - timing:
+        - ON for at most 0.5s
+        - OFF for at most 0.5s
+        - ON for at most 0.5s
+        - OFF for at least 0.2s
+      invalid_cooldown: 0.5s
+      then:
+        - logger.log: "Double Clicked"
+        - light.toggle: massage_room_secondary
+    - timing:
+        - ON for 0.7s to 5s
+        - OFF for at least 0.5s
+      invalid_cooldown: 0.5s
+      then:
+        - logger.log: "Single Long Clicked"
+        - button.press: halogenerator_button
+    - timing:
+        - ON for at most 0.5s
+        - OFF for at least 0.5s
+      invalid_cooldown: 0.5s
+      then:
+        - logger.log: "Single Short Clicked"
+        - light.toggle: massage_room_main
+
+    
+
+
+
+## OUTPUTS ##
+output:
+
+  - platform: ledc
+    pin: 3
+    id: pwm_1
+  
+  - platform: ledc
+    pin: 4
+    id: pwm2
+
+  - platform: gpio
+    pin: 33
+    id: r_1
+    inverted: true
+  
+  - platform: gpio
+    pin: 32
+    id: r_2
+    inverted: true
+
+##LIGHT
+light:
+
+  - platform: binary
+    name: "Massage Room Main"
+    id: massage_room_main
+    output: r_1
+
+  - platform: binary
+    name: "Massage Room Secondary"
+    id: massage_room_secondary
+    output: r_2
+
+  - platform: monochromatic
+    id: test_ir
+    name: IR
+    output: pwm2
+  
+
+script:
+  - id: press_my_button_repeatedly
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return id(halogenerator_active);'
+          then:
+            - button.press: halogenerator_button
+            - delay: 10sec # Use a shorter delay if necessary to prevent watchdog issues
+            - script.execute: press_my_button_repeatedly
+
+switch:
+  - platform: template
+    name: "Halogenerator Switch"
+    id: halogenerator_switch
+    optimistic: true
+    turn_on_action:
+      - globals.set:
+          id: halogenerator_active
+          value: 'true'
+      - script.execute: press_my_button_repeatedly
+    turn_off_action:
+      - globals.set:
+          id: halogenerator_active
+          value: 'false'
+
+
+    
+  
+    
+    
+dallas:
+  - pin: 13
+    update_interval: 5s
+
+servo:
+  - id: but
+    output: pwm_1
+    min_level: 50%
+    max_level: 90%
+
