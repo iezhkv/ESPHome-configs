@@ -1,0 +1,752 @@
+
+globals:
+  - id: thermostat_mode
+    type: std::string
+    initial_value: '"off"'
+
+  - id: pump_last_run
+    type: uint32_t
+    initial_value: '0'
+
+esphome:
+  name: plc-service-room
+  friendly_name: PLC Service Room
+  on_boot:
+    then:
+      - delay: 2s  # Initial delay after boot to stabilize
+      - script.execute: check_light_brightness
+      - delay: 1s
+      - script.execute: herbal_sauna_pump_control
+
+
+
+esp32:
+  board: esp32-poe
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "mysuperstrongencryption"
+
+ota:
+  password: "0c9af55c18bc7a143ec7b724d04bcf03"
+
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk_mode: GPIO17_OUT
+  phy_addr: 0
+  power_pin: GPIO12
+  manual_ip:
+    static_ip: 192.168.1.158
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  
+    
+web_server:
+  port: 80
+
+# globals:
+#   - id: enable_pump
+#     type: bool
+#     restore_value: yes
+
+i2c:
+  sda: 13
+  scl: 16
+  scan: True
+  id: bus_a
+
+
+
+
+pcf8574:
+
+  - id: 'pcf'
+    i2c_id: bus_a
+    address: 0x20
+    pcf8575: true
+
+
+# tca9548a:
+#   - address: 0x70
+#     id: multiplex0
+#     i2c_id: bus_a
+#     channels:
+#       - bus_id: multiplex0channel0
+#         channel: 0
+#       - bus_id: multiplex0channel1
+#         channel: 1
+
+
+
+output:
+  - platform: ledc
+    pin: 4
+    id: ir_sauna_output
+    frequency: 19531Hz
+
+light:
+  - platform: monochromatic
+    name: "IR Sauna Dim"
+    id: ir_sauna_dim
+    output: ir_sauna_output
+    gamma_correct: 1.0
+ 
+
+
+
+
+
+
+
+# binary_sensor:
+#   - platform: gpio
+#     name: "Steam Bath Door"
+#     device_class: window
+#     id: "steam_bath_door"
+#     pin:
+#       pcf8574: pcf
+#       number: 17
+#       mode:
+#         input: true
+
+#     on_state:
+#       then:
+#         - if:
+#             condition:
+#               - binary_sensor.is_on: steam_bath_door
+#             then:
+#               - lambda: |-
+#                   // Store the current mode
+#                   id(thermostat_mode) = id(steam_bath_thermostat).mode;
+#                   // Turn off the thermostat
+#                   id(steam_bath_thermostat).turn_off();
+#             else:
+#               - lambda: |-
+#                   // Restore the thermostat's mode
+#                   if (id(thermostat_mode) == "cool") {
+#                     id(steam_bath_thermostat).set_mode(climate::CLIMATE_MODE_COOL);
+#                   } else if (id(thermostat_mode) == "heat") {
+#                     id(steam_bath_thermostat).set_mode(climate::CLIMATE_MODE_HEAT);
+#                   } // Add more modes as needed
+#                   // Assume no action is needed if it was off since it will remain off
+
+switch:
+  - platform: restart
+    name: "Restart"
+
+  # - platform: template
+  #   name: "Herbal Sauna Pump"
+  #   id: 'herbal_sauna_pump'
+  #   lambda: |-
+  #     return id(enable_pump);
+  #   turn_on_action:
+  #     - lambda: |-
+  #         id(enable_pump) = true;
+  #   turn_off_action:
+  #     - lambda: |-
+  #         id(enable_pump) = false;
+  #   restore_mode: RESTORE_DEFAULT_OFF
+
+  - platform: gpio
+    name: "1"
+    id: "one1"
+    pin:
+      pcf8574: pcf
+      number: 1
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "2"
+    id: "one2"
+    pin:
+      pcf8574: pcf
+      number: 2
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "3"
+    id: "one3"
+    pin:
+      pcf8574: pcf
+      number: 3
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "4"
+    id: "one4"
+    pin:
+      pcf8574: pcf
+      number: 4
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "Salt Steam Bath Bench"
+    id: "slat_steam_bath_bench"
+    pin:
+      pcf8574: pcf
+      number: 5
+      mode:
+        output: true
+
+  - platform: gpio
+    name: "Steam Bath Bench"
+    id: "steam_bath_bench"
+    pin:
+      pcf8574: pcf
+      number: 6
+      mode:
+        output: true
+
+  - platform: gpio
+    name: "Spa Benches"
+    id: "spa_hallway_benches"
+    pin:
+      pcf8574: pcf
+      number: 7
+      mode:
+        output: true
+
+  - platform: gpio
+    name: "8"
+    id: "one123"
+    pin:
+      pcf8574: pcf
+      number: 11
+      mode:
+        output: true
+      inverted: true
+
+
+
+
+  - platform: gpio
+    name: "Herbal Sauna Heater"
+    id: "herbal_sauna_heater"
+    pin:
+      pcf8574: pcf
+      number: 15
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "Herbal Sauna Vaporizer"
+    id: "herbal_sauna_vaporizer"
+    pin:
+      pcf8574: pcf
+      number: 13
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "IR Sauna"
+    id: "ir_sauna"
+    pin:
+      pcf8574: pcf
+      number: 10
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "Salt Steam Bath"
+    id: "salt_steam_bath"
+    pin:
+      pcf8574: pcf
+      number: 16
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "Steam Bath"
+    id: "steam_bath"
+    pin:
+      pcf8574: pcf
+      number: 14
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "Finnish Sauna Heater"
+    id: "finnish_sauna_heater"
+    pin:
+      pcf8574: pcf
+      number: 9
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "Finnish Sauna Vaporizer"
+    id: "finnish_sauna_vaporizer"
+    pin:
+      pcf8574: pcf
+      number: 12
+      mode:
+        output: true
+      inverted: true
+
+  - platform: gpio
+    name: "Herbal Sauna Dosing Pump"
+    id: "herbal_sauna_dosing_pump"
+    pin:
+      pcf8574: pcf
+      number: 8
+      mode:
+        output: true
+      inverted: true
+
+ 
+
+
+
+
+dallas:
+  - pin: 3
+    update_interval: 5s
+
+sensor:
+
+  - platform: sht3xd
+    i2c_id: bus_a
+    temperature:
+      name: "Living Room Temperature"
+    humidity:
+      name: "Living Room Humidity"
+    address: 0x44
+    update_interval: 5s
+
+  - platform: dht ## IR SAUNA SENSOR
+    model: AM2302
+    pin: 5
+    temperature:
+      name: "Infrared Sauna Temperature"
+      force_update: true
+      filters:
+        - median:
+            window_size: 10
+            send_every: 6
+            send_first_at: 5
+        - calibrate_linear:
+          - 0.0 -> 0.0
+          - 100.0 -> 100.0
+    humidity:
+      name: "Infrared Sauna Humidity"
+      force_update: true
+      filters:
+        - median:
+            window_size: 10
+            send_every: 6
+            send_first_at: 5
+        - calibrate_linear:
+          - 0.0 -> 0.0
+          - 100.0 -> 100.0
+    update_interval: 5s
+
+  - platform: dht ## FINNISH SAUNA SENSOR
+    model: AM2302
+    pin: 32
+    temperature:
+      name: "Finnish Sauna Temperature"
+      id: "finnish_sauna_temperature"
+      force_update: true
+      filters:
+        - median:
+            window_size: 10
+            send_every: 6
+            send_first_at: 5
+        - calibrate_linear:
+          - 0.0 -> 0.0
+          - 100.0 -> 100.0
+    humidity:
+      name: "Finnish Sauna Humidity"
+      id: "finnish_sauna_humidity"
+      force_update: true
+      filters:
+        - median:
+            window_size: 10
+            send_every: 6
+            send_first_at: 5
+        - calibrate_linear:
+          - 0.0 -> 0.0
+          - 100.0 -> 100.0
+    update_interval: 5s
+  
+  - platform: dht ## HERBAL SAUNA SENSOR
+    model: AM2302
+    pin: 33
+    temperature:
+      name: "Herbal Sauna Temperature"
+      id: "herbal_sauna_temperature"
+      force_update: true
+      filters:
+        - median:
+            window_size: 10
+            send_every: 6
+            send_first_at: 5
+        - calibrate_linear:
+          - 0.0 -> 0.0
+          - 100.0 -> 100.0
+    humidity:
+      name: "Herbal Sauna Humidity"
+      id: "herbal_sauna_humidity"
+      force_update: true
+      filters:
+        - median:
+            window_size: 10
+            send_every: 6
+            send_first_at: 5
+        - calibrate_linear:
+          - 0.0 -> 0.0
+          - 100.0 -> 100.0
+    update_interval: 5s
+
+
+  - platform: dallas ## STEAM BATH SENSOR
+    address: 0x223c15f648e22c28
+    name: "Steam Bath"
+    id: "steam_bath_temperature"
+    force_update: true
+    filters:
+      - filter_out: -127.00
+      - filter_out: 127.00
+      - median:
+          window_size: 10
+          send_every: 6
+          send_first_at: 5
+      - calibrate_linear:
+        - 0.0 -> 0.0
+        - 100.0 -> 100.0
+    
+  - platform: dallas ## STEAM BATH BENCH SENSOR
+    address: 0x093cc4f649e3c828
+    name: "Steam Room Bench"
+    id: "steam_bath_bench_temperaute"
+    force_update: true
+    filters:
+      - filter_out: -127.00
+      - filter_out: 127.00
+      - median:
+          window_size: 10
+          send_every: 6
+          send_first_at: 5
+      - calibrate_linear:
+        - 0.0 -> 0.0
+        - 100.0 -> 100.0
+
+  - platform: dallas ## SPA HALLWAY BENCHES SENSOR
+    address: 0xe33c75f6488a1f28
+    name: "Spa Hallway Benches"
+    id: "spa_hallway_benches_temperature"
+    force_update: true
+    filters:
+      - filter_out: -127.00
+      - filter_out: 127.00
+      - median:
+          window_size: 10
+          send_every: 6
+          send_first_at: 5
+      - calibrate_linear:
+        - 0.0 -> 0.0
+        - 100.0 -> 100.0
+
+  - platform: dallas ## SALT STEAM ROOM BENCH
+    address: 0x883c21f648aee928
+    name: "Salt Steam Room Bench"
+    id: "salt_steam_bath_bench_temperaute"
+    accuracy_decimals: 2
+    force_update: true
+    filters:
+      - filter_out: -127.00
+      - filter_out: 127.00
+      - median:
+          window_size: 10
+          send_every: 6
+          send_first_at: 5
+      - calibrate_linear:
+        - 0.0 -> 0.0
+        - 100.0 -> 100.0
+
+  - platform: dallas ## SALT STEAM BATH
+    address: 0xe83c62f649ded128
+    name: "Salt Steam Bath"
+    id: "salt_steam_bath_temperature"
+    accuracy_decimals: 2
+    force_update: true
+    filters:
+      - filter_out: -127.00
+      - filter_out: 127.00
+      - median:
+          window_size: 10
+          send_every: 6
+          send_first_at: 5
+      - calibrate_linear:
+        - 0.0 -> 0.0
+        - 100.0 -> 100.0
+
+
+
+
+
+
+number:
+  - platform: template ## PUMP DURATION
+    id: pump_duration
+    name: "Pump Duration"
+    mode: slider
+    unit_of_measurement: "s"
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 60
+    step: 1
+
+  - platform: template ## PUMP FREAQUENCY
+    id: pump_frequency
+    name: "Pump Freaquency"
+    mode: slider
+    unit_of_measurement: "m"
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 60
+    step: 1
+
+
+
+## Climate
+
+climate:
+
+  - platform: thermostat ## FINNISH SAUNA
+    name: "Finnish Sauna Thermostat"
+    id: "finnish_sauna_thermostat"
+    sensor: finnish_sauna_temperature
+    humidity_sensor: finnish_sauna_humidity
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    heat_deadband: 0.1
+    heat_overrun: 0.1
+    heat_action:
+      - switch.turn_on: finnish_sauna_heater
+    idle_action:
+      - switch.turn_off: finnish_sauna_heater
+    visual:
+      min_temperature: 20
+      max_temperature: 100
+      temperature_step: 0.5
+      min_humidity: 0%
+      max_humidity: 100%
+
+  - platform: thermostat ## HERBAL SAUNA
+    name: "Herbal Sauna Thermostat"
+    id: "herbal_sauna_thermostat"
+    sensor: herbal_sauna_temperature
+    humidity_sensor: herbal_sauna_humidity
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    heat_deadband: 0.1
+    heat_overrun: 0.1
+    heat_action:
+      - switch.turn_on: herbal_sauna_heater
+    idle_action:
+      - switch.turn_off: herbal_sauna_heater
+    visual:
+      min_temperature: 20
+      max_temperature: 100
+      temperature_step: 0.5
+      min_humidity: 0%
+      max_humidity: 100%
+
+
+  - platform: thermostat ## STEAM BATH
+    name: "Steam Bath Thermostat"
+    id: "steam_bath_thermostat"
+    sensor: steam_bath_temperature
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    heat_deadband: 0.1
+    heat_overrun: 0.1
+    heat_action:
+      - switch.turn_on: steam_bath
+    idle_action:
+      - switch.turn_off: steam_bath
+    visual:
+      min_temperature: 20
+      max_temperature: 70
+      temperature_step: 0.5
+
+  - platform: thermostat ## SALT STEAM BATH
+    name: "Salt Steam Bath Thermostat"
+    id: "_saltsteam_bath_thermostat"
+    sensor: salt_steam_bath_temperature
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    heat_deadband: 0.1
+    heat_overrun: 0.1
+    heat_action:
+      - switch.turn_on: salt_steam_bath
+    idle_action:
+      - switch.turn_off: salt_steam_bath
+    visual:
+      min_temperature: 20
+      max_temperature: 70
+      temperature_step: 0.5
+
+    ##  BENCHES
+
+  - platform: thermostat ## SALT STEAM BATH BENCH
+    name: "Salt Steam Bath Bench Thermostat"
+    id: "salt_steam_bath_bench_thermostat"
+    sensor: salt_steam_bath_bench_temperaute
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    heat_deadband: 0.1
+    heat_overrun: 0.1
+    heat_action:
+      - switch.turn_on: slat_steam_bath_bench
+    idle_action:
+      - switch.turn_off: slat_steam_bath_bench
+    visual:
+      min_temperature: 20
+      max_temperature: 40
+      temperature_step: 0.5
+
+
+  - platform: thermostat ## STEAM BATH BENCH
+    name: "Steam Bath Bench Thermostat"
+    id: "steam_bath_bench_thermostat"
+    sensor: steam_bath_bench_temperaute
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    heat_deadband: 0.1
+    heat_overrun: 0.1
+    heat_action:
+      - switch.turn_on: steam_bath_bench
+    idle_action:
+      - switch.turn_off: steam_bath_bench
+    visual:
+      min_temperature: 20
+      max_temperature: 40
+      temperature_step: 0.5
+
+
+  - platform: thermostat ## SPA HALLWAY BENCHES
+    name: "Spa Hallway Benches Thermostat"
+    id: "spa_hallway_benches_thermostat"
+    sensor: spa_hallway_benches_temperature
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    heat_deadband: 0.1
+    heat_overrun: 0.1
+    heat_action:
+      - switch.turn_on: spa_hallway_benches
+    idle_action:
+      - switch.turn_off: spa_hallway_benches
+    visual:
+      min_temperature: 20
+      max_temperature: 40
+      temperature_step: 0.5
+
+
+
+
+
+## SCRIPTS
+
+script: 
+
+
+  - id: check_light_brightness ## IR SAUNA SMART CELLING DIMMING
+    then:
+      - while:
+          condition:
+            lambda: 'return true;'  # Run indefinitely
+          then:
+            - delay: 1s  # Check every second, adjust as necessary.
+            - lambda: |-
+                if (id(ir_sauna_dim).current_values.is_on() && id(ir_sauna_dim).current_values.get_brightness() >= 0.3) {
+                  // Light is on and brightness is 30% or more, turn on the switch
+                  id(ir_sauna).turn_on();
+                } 
+                else if (id(ir_sauna_dim).current_values.is_on() && id(ir_sauna_dim).current_values.get_brightness() < 0.3) {
+                  // Light is on but brightness is less than 30%, turn off the switch
+                  id(ir_sauna).turn_off();
+                } 
+                else {
+                  // Check if the light is off then perform actions
+                  if (!id(ir_sauna_dim).current_values.is_on() && id(ir_sauna).state) {
+                    // Light is off, ensure the switch is off
+                    id(ir_sauna).turn_off();
+                  }
+                }
+
+#  if (id(herbal_sauna_thermostat).mode != climate::CLIMATE_MODE_HEAT ||
+#                     id(herbal_sauna_temperature).state <= 50) {
+#                   // Conditions not met, skip this iteration
+#                   return;
+#                 }
+
+
+  - id: herbal_sauna_pump_control
+    then:
+      - while:
+          condition:
+            lambda: 'return true;'  # Run indefinitely
+          then:
+            - lambda: |-
+                if (id(herbal_sauna_thermostat).mode != climate::CLIMATE_MODE_HEAT) {
+                  // Conditions not met, skip this iteration
+                  return;
+                }
+                static unsigned long last_run_time = 0;
+                unsigned long current_time = millis();
+                
+                // Get the pump duration in seconds and pump frequency in minutes
+                int original_duration_seconds = id(pump_duration).state * 1000; // Convert to milliseconds
+                int frequency_seconds = id(pump_frequency).state * 60000; // Convert to milliseconds
+                
+                // Ensure the pump duration accounts for the time it takes the liquid to reach to the end point
+                int adjusted_duration_seconds = max(0, original_duration_seconds + 0);
+                
+                // Check if the pump is currently on or off based on the switch state
+                bool pump_is_on = id(steam_bath_bench).state;
+                
+                if (!pump_is_on && (current_time - last_run_time >= frequency_seconds)) {
+                  // Turn on the pump
+                  id(steam_bath_bench).turn_on();
+                  last_run_time = current_time;
+                }
+                else if (pump_is_on && (current_time - last_run_time >= adjusted_duration_seconds)) {
+                  // Turn off the pump
+                  id(steam_bath_bench).turn_off();
+                  // Adjust last_run_time to account for the duration already passed, including the delay
+                  last_run_time += original_duration_seconds; // Use original_duration_seconds to maintain cycle frequency
+                }
+            - delay: 2s  # Delay 2 seconds at the end of each loop iteration
