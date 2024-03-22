@@ -1,0 +1,130 @@
+substitutions:
+  devicename: room201
+  upper_devicename: Room 201
+  room_number: "201"
+
+esphome:
+  name: ${room_number}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+
+wifi:
+  ssid: Office
+  password: ""
+  manual_ip:
+    static_ip: 192.168.0.172
+    gateway: 192.168.0.1
+    subnet: 255.255.255.0
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esphome-Web-0Eda84"
+    password: "ksux5aIh979Q"
+
+web_server:
+  port: 80
+
+captive_portal:
+
+globals:
+  - id: server_url
+    type: std::string
+    initial_value: '"http://192.168.0.20:3000/keys"'
+
+  - id: room_number
+    type: std::string
+    initial_value: '"${room_number}"'
+
+http_request:
+  id: http_request_data
+  useragent: esphome/device
+  timeout: 10s
+
+spi:
+  clk_pin: 18
+  miso_pin: 19
+  mosi_pin: 23
+
+# ///////////////////////////////////////////////////////////////
+
+
+lock:
+  - platform: template
+    name: ${upper_devicename}
+    id: ${devicename}_door_lock
+    lambda: |-
+      if (id(${devicename}_door_relay).state) {
+        return LOCK_STATE_UNLOCKED;
+      }
+      else {
+        return LOCK_STATE_LOCKED;
+      }
+    lock_action:
+      - switch.turn_off: ${devicename}_door_relay
+    unlock_action:
+      - switch.turn_on: ${devicename}_door_relay
+      - wait_until:
+          condition:
+            binary_sensor.is_on: ${devicename}_door_sensor
+          timeout: 8s
+      - wait_until:
+          condition:
+            binary_sensor.is_off: ${devicename}_door_sensor
+          timeout: 20s
+      - lock.lock: ${devicename}_door_lock
+
+switch:
+  - platform: gpio
+    pin: 21
+    id: ${devicename}_door_relay
+    restore_mode: ALWAYS_OFF
+    internal: true
+    inverted: true
+
+binary_sensor:
+  - platform: gpio
+    name: ${upper_devicename} Door Sensor
+    id: ${devicename}_door_sensor
+    pin:
+      number: 16
+      mode: INPUT_PULLUP
+    device_class: door
+
+rc522_spi: # or rc522_i2c
+  cs_pin: 5
+  update_interval: 0.7s
+  on_tag:
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: ${devicename}_door_sensor
+          then:
+            - logger.log: "The door is open!"
+          else:
+            - http_request.get:
+                url: !lambda |-
+                  return ((std::string) (id(server_url)) + "/" + (id(room_number)) + "/" + x ).c_str();
+                headers:
+                  Content-Type: application/json
+                verify_ssl: false
+                on_response:
+                  then:
+                    - lambda: |-
+                        json::parse_json(id(http_request_data).get_string(), [](JsonObject root) {
+                          if(root["Response"] == "Authorized") {
+                            id(${devicename}_door_lock).unlock();
+                          };
+                        });
+
