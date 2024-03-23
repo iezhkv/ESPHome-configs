@@ -1,8 +1,9 @@
-
 globals:
-  - id: thermostat_mode
-    type: std::string
-    initial_value: '"off"'
+  - id: thermostat_state
+    type: int
+    restore_value: true
+    initial_value: '0'  # 0 for OFF, 1 for HEAT, 2 for COOL
+
 
   - id: pump_last_run
     type: uint32_t
@@ -31,7 +32,7 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: "mysuperstrongencryption"
+    key: "rnfSqeH/cGFMfe4ZUGAScDifudgGboS2+G5ags6qaos="
 
 ota:
   password: "0c9af55c18bc7a143ec7b724d04bcf03"
@@ -69,9 +70,14 @@ i2c:
 pcf8574:
 
   - id: 'pcf'
-    i2c_id: bus_a
     address: 0x20
     pcf8575: true
+
+  - id: 'pcf2'
+    address: 0x21
+    pcf8575: true
+
+
 
 
 # tca9548a:
@@ -106,64 +112,67 @@ light:
 
 
 
-# binary_sensor:
-#   - platform: gpio
-#     name: "Steam Bath Door"
-#     device_class: window
-#     id: "steam_bath_door"
-#     pin:
-#       pcf8574: pcf
-#       number: 17
-#       mode:
-#         input: true
+binary_sensor:
+  - platform: gpio
+    name: "Steam Bath Door"
+    device_class: window
+    id: steam_bath_door
+    filters:
+      - delayed_on_off: 5s
+    pin:
+      pcf8574: pcf2
+      number: 1
+      mode:
+        input: true
+    on_state:
+      then:
+        - if:
+            condition:
+              # Check if the door has been opened
+              binary_sensor.is_on: steam_bath_door
+            then:
+              # Door opened actions
+              - lambda: |-
+                  // Before turning the thermostat off, check its current mode
+                  // Store the current mode in the global variable for later restoration
+                  if (id(steam_bath_thermostat).mode == climate::CLIMATE_MODE_HEAT) {
+                    id(thermostat_state) = 1;  // Indicate that the previous mode was HEAT
+                  } else if (id(steam_bath_thermostat).mode == climate::CLIMATE_MODE_COOL) {
+                    id(thermostat_state) = 2;  // Indicate that the previous mode was COOL
+                  } else {
+                    // If the thermostat was in a different mode (including OFF), store 0
+                    id(thermostat_state) = 0;
+                  }
+                  // Now turn off the thermostat regardless of its previous state
+                  auto call = id(steam_bath_thermostat).make_call();
+                  call.set_mode(climate::CLIMATE_MODE_OFF);
+                  call.perform();
+            else:
+              # Door closed actions
+              - lambda: |-
+                  // When the door closes, check the stored state and restore the thermostat's mode accordingly
+                  if (id(thermostat_state) == 1) {
+                    // If the stored state was HEAT, set the thermostat back to HEAT mode
+                    auto call = id(steam_bath_thermostat).make_call();
+                    call.set_mode(climate::CLIMATE_MODE_HEAT);
+                    call.perform();
+                  } else if (id(thermostat_state) == 2) {
+                    // If the stored state was COOL, set the thermostat back to COOL mode
+                    auto call = id(steam_bath_thermostat).make_call();
+                    call.set_mode(climate::CLIMATE_MODE_COOL);
+                    call.perform();
+                  }
+                  // No need to explicitly handle the case where thermostat_state == 0,
+                  // as the thermostat was either off or in a state that does not require restoration.
 
-#     on_state:
-#       then:
-#         - if:
-#             condition:
-#               - binary_sensor.is_on: steam_bath_door
-#             then:
-#               - lambda: |-
-#                   // Store the current mode
-#                   id(thermostat_mode) = id(steam_bath_thermostat).mode;
-#                   // Turn off the thermostat
-#                   id(steam_bath_thermostat).turn_off();
-#             else:
-#               - lambda: |-
-#                   // Restore the thermostat's mode
-#                   if (id(thermostat_mode) == "cool") {
-#                     id(steam_bath_thermostat).set_mode(climate::CLIMATE_MODE_COOL);
-#                   } else if (id(thermostat_mode) == "heat") {
-#                     id(steam_bath_thermostat).set_mode(climate::CLIMATE_MODE_HEAT);
-#                   } // Add more modes as needed
-#                   // Assume no action is needed if it was off since it will remain off
+
 
 switch:
   - platform: restart
     name: "Restart"
 
-  # - platform: template
-  #   name: "Herbal Sauna Pump"
-  #   id: 'herbal_sauna_pump'
-  #   lambda: |-
-  #     return id(enable_pump);
-  #   turn_on_action:
-  #     - lambda: |-
-  #         id(enable_pump) = true;
-  #   turn_off_action:
-  #     - lambda: |-
-  #         id(enable_pump) = false;
-  #   restore_mode: RESTORE_DEFAULT_OFF
 
-  - platform: gpio
-    name: "1"
-    id: "one1"
-    pin:
-      pcf8574: pcf
-      number: 1
-      mode:
-        output: true
-      inverted: true
+
 
   - platform: gpio
     name: "2"
@@ -325,15 +334,6 @@ dallas:
     update_interval: 5s
 
 sensor:
-
-  - platform: sht3xd
-    i2c_id: bus_a
-    temperature:
-      name: "Living Room Temperature"
-    humidity:
-      name: "Living Room Humidity"
-    address: 0x44
-    update_interval: 5s
 
   - platform: dht ## IR SAUNA SENSOR
     model: AM2302
@@ -707,12 +707,6 @@ script:
                   }
                 }
 
-#  if (id(herbal_sauna_thermostat).mode != climate::CLIMATE_MODE_HEAT ||
-#                     id(herbal_sauna_temperature).state <= 50) {
-#                   // Conditions not met, skip this iteration
-#                   return;
-#                 }
-
 
   - id: herbal_sauna_pump_control
     then:
@@ -721,7 +715,8 @@ script:
             lambda: 'return true;'  # Run indefinitely
           then:
             - lambda: |-
-                if (id(herbal_sauna_thermostat).mode != climate::CLIMATE_MODE_HEAT) {
+                // Ensure the thermostat is on and the temperature is equal or above 50c
+                if (id(herbal_sauna_thermostat).mode != climate::CLIMATE_MODE_HEAT && id(herbal_sauna_temperature).state < 50) {
                   // Conditions not met, skip this iteration
                   return;
                 }
@@ -736,16 +731,16 @@ script:
                 int adjusted_duration_seconds = max(0, original_duration_seconds + 0);
                 
                 // Check if the pump is currently on or off based on the switch state
-                bool pump_is_on = id(steam_bath_bench).state;
+                bool pump_is_on = id(herbal_sauna_dosing_pump).state;
                 
                 if (!pump_is_on && (current_time - last_run_time >= frequency_seconds)) {
                   // Turn on the pump
-                  id(steam_bath_bench).turn_on();
+                  id(herbal_sauna_dosing_pump).turn_on();
                   last_run_time = current_time;
                 }
                 else if (pump_is_on && (current_time - last_run_time >= adjusted_duration_seconds)) {
                   // Turn off the pump
-                  id(steam_bath_bench).turn_off();
+                  id(herbal_sauna_dosing_pump).turn_off();
                   // Adjust last_run_time to account for the duration already passed, including the delay
                   last_run_time += original_duration_seconds; // Use original_duration_seconds to maintain cycle frequency
                 }
