@@ -1,0 +1,74 @@
+esphome:
+  name: spa_controller
+  platform: ESP32
+  board: esp32dev
+
+globals:
+  - id: halogenerator_last_press
+    type: uint32
+    restore_value: no
+    initial_value: '0'
+  - id: halogenerator_active
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+servo:
+  - id: halogenerator_servo
+    pin: GPIO23
+    min_level: 0%
+    max_level: 100%
+
+button:
+  - platform: template
+    name: "Halogenerator Button"
+    id: halogenerator_button
+    on_press:
+      then:
+        - servo.write:
+            id: halogenerator_servo
+            level: 80.0%
+        - delay: 300ms
+        - servo.write:
+            id: halogenerator_servo
+            level: 50.0%
+        - globals.set:
+            id: halogenerator_last_press
+            value: 'millis()'
+        - globals.toggle: halogenerator_active
+
+switch:
+  - platform: template
+    name: "Halogenerator Power Switch"
+    id: halogenerator_power_switch
+    optimistic: true
+    assumed_state: true
+    turn_on_action:
+      - if:
+          condition:
+            lambda: 'return !id(halogenerator_active);'
+          then:
+            - script.execute: handle_halogenerator_activation
+    turn_off_action:
+      - if:
+          condition:
+            lambda: 'return id(halogenerator_active);'
+          then:
+            - script.execute: handle_halogenerator_activation
+
+script:
+  - id: handle_halogenerator_activation
+    then:
+      - if:
+          condition:
+            lambda: 'return (millis() - id(halogenerator_last_press)) > 5000;'
+          then:
+            - button.press: halogenerator_button
+          else:
+            - logger.log: "Halogenator activation attempt too soon. Please wait."
+            - delay: 5s
+            - script.execute: handle_halogenerator_activation
+
+logger:
+api:
+ota:
