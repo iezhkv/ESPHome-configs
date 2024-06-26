@@ -1,0 +1,82 @@
+esphome:
+  name: modbus_slave
+
+
+
+esp32:
+  board: esp32-poe
+  framework:
+    type: arduino
+
+
+# Enable logging
+logger:
+  baud_rate: 0
+
+
+wifi:
+  ssid: "Office"
+  password: ""
+
+# Optional: Web server for diagnostics and control
+web_server:
+  port: 80
+
+
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "xzk+JFc7tYbRshh0XwnB/cYwCoIog7/gxSNumfTcQBQ="
+
+# Enable OTA updates
+ota:
+  platform: esphome
+  password: "3d5c5052c31f75730cfa5d4e4e79435b"
+
+
+sensor:
+  - platform: dht
+    pin: 3
+    model: DHT22
+    temperature:
+      name: "DHT22 Temperature"
+      id: dht22_temperature
+    humidity:
+      name: "DHT22 Humidity"
+      id: dht22_humidity
+    update_interval: 1s
+
+
+
+# Configure the UART for Modbus
+uart:
+  id: uart_modbus_server
+  tx_pin: 4
+  rx_pin: 36
+  baud_rate: 9600
+
+# Configure the Modbus component as a server
+modbus:
+  uart_id: uart_modbus_server
+  id: modbus_server
+  role: server
+
+# Modbus controller configuration for the server
+modbus_controller:
+  - id: modbus_evse_server
+    modbus_id: modbus_server
+    address: 0x01
+    server_registers:
+
+      - address: 0x0001
+        value_type: FP32
+        read_lambda: |-
+          return id(dht22_temperature).state;
+
+      - address: 0x0002
+        value_type: FP32
+        read_lambda: |-
+          return id(dht22_humidity).state;
+
+
