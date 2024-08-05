@@ -1,0 +1,225 @@
+esphome:
+  name: mirror-thermostat-test
+  friendly_name: Mirror Thermostat Test
+
+
+globals:
+  - id: thermostat_state
+    type: int
+    restore_value: true
+    initial_value: '0'  # 0 for OFF, 1 for HEAT, 2 for COOL
+
+http_request:
+  verify_ssl: false
+
+esp32:
+  board: esp32-poe
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "TBhOPb3cdw/qYvtPNMyKSEbCzTndys50sCuzWvcJtvY="
+
+ota:
+  - platform: esphome
+    password: "fb39b717418246ea162532314bca89cf"
+
+wifi:
+  ssid: Bozhe Ime
+  password: "0897923140"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esp-Poe-Prototype"
+    password: "QujZYANull7b"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+i2c:
+  sda: 13
+  scl: 16
+  scan: True
+  id: bus_a
+
+
+sensor:
+  - platform: sht3xd
+    temperature:
+      name: "Temp"
+      id: temp
+    address: 0x44
+    update_interval: 60s
+
+
+display:
+    platform: tm1637
+    id: tm1637_display
+    clk_pin: 33
+    dio_pin: 32
+    inverted: true
+    length: 4
+    update_interval: 0.5s
+    lambda: |-
+      if (id(therm).mode == climate::CLIMATE_MODE_COOL) {
+        if (id(therm).target_temperature_high <= 15.5) {
+          it.printf(0, "15");
+        } else {
+          it.printf(0, "%.0f", id(therm).target_temperature_high);
+        }
+      } else if (id(therm).mode == climate::CLIMATE_MODE_HEAT) {
+        if (id(therm).target_temperature_low >= 29.5) {
+          it.printf(0, "30");
+        } else {
+          it.printf(0, "%.0f", id(therm).target_temperature_low);
+        }
+      } else {
+        it.printf(0, "    ");  // Clear the display by printing spaces
+      }
+
+
+switch:
+  - platform: gpio
+    pin: 1
+    id: heater
+    name: "Heater"
+
+  - platform: gpio
+    pin: 2
+    id: air_cond
+    name: "Heater"
+
+
+
+
+climate:
+  - platform: thermostat
+    name: "Thermostat Climate Controller"
+    id: therm
+    sensor: temp
+    min_cooling_off_time: 0s
+    min_cooling_run_time: 0s
+    min_heating_off_time: 0s
+    min_heating_run_time: 0s
+    min_idle_time: 0s
+    cool_action:
+      - switch.turn_on: air_cond
+    heat_action:
+      - switch.turn_on: heater
+    idle_action:
+      - switch.turn_off: air_cond
+      - switch.turn_off: heater
+    visual:
+      min_temperature: 15
+      max_temperature: 30
+      temperature_step: 1
+    on_control:
+      - lambda: |-
+          if (x.get_mode() == CLIMATE_MODE_COOL) {
+            auto call = id(therm).make_call();
+            call.set_target_temperature_low(15);
+            call.perform();
+          } else if (x.get_mode() == CLIMATE_MODE_HEAT) {
+            auto call = id(therm).make_call();
+            call.set_target_temperature_high(30);
+            call.perform();
+          }
+
+
+
+binary_sensor:
+  - platform: gpio
+    pin: 34
+    id: increase_temp_button
+    name: "Increase Temp Button"
+    # filters:
+    #   - delayed_on_off: 500ms
+    on_press:
+      then:
+        - lambda: |-
+            if (id(therm).mode == climate::CLIMATE_MODE_COOL) {
+              int new_temp = id(therm).target_temperature_high + 1;
+              if (new_temp <= 30.0) {
+                auto call = id(therm).make_call();
+                call.set_target_temperature_high(new_temp);
+                call.perform();
+              }
+            } else if (id(therm).mode == climate::CLIMATE_MODE_HEAT) {
+              int new_temp = id(therm).target_temperature_low + 1;
+              if (new_temp <= 30.0) {
+                auto call = id(therm).make_call();
+                call.set_target_temperature_low(new_temp);
+                call.perform();
+              }
+            }
+
+  - platform: gpio
+    pin: 39
+    id: decrease_temp_button
+    name: "Decrease Temp Button"
+    # filters:
+    #   - delayed_on_off: 500ms
+    on_press:
+      then:
+        - lambda: |-
+            if (id(therm).mode == climate::CLIMATE_MODE_COOL) {
+              int new_temp = id(therm).target_temperature_high - 1;
+              if (new_temp >= 15.0) {
+                auto call = id(therm).make_call();
+                call.set_target_temperature_high(new_temp);
+                call.perform();
+              }
+            } else if (id(therm).mode == climate::CLIMATE_MODE_HEAT) {
+              int new_temp = id(therm).target_temperature_low - 1;
+              if (new_temp >= 15.0) {
+                auto call = id(therm).make_call();
+                call.set_target_temperature_low(new_temp);
+                call.perform();
+              }
+            }
+
+  - platform: gpio
+    pin: 3
+    id: on_off_button
+    name: "On-Off Button"
+    # filters:
+    #   - delayed_on_off: 500ms
+    on_press:
+      then:
+        - if:
+            condition:
+              # Check if the thermostat is on
+              lambda: 'return id(therm).mode != climate::CLIMATE_MODE_OFF;'
+            then:
+              - lambda: |-
+                  // Store the current mode in the global variable for later restoration
+                  if (id(therm).mode == climate::CLIMATE_MODE_HEAT) {
+                    id(thermostat_state) = 1;
+                  } else if (id(therm).mode == climate::CLIMATE_MODE_COOL) {
+                    id(thermostat_state) = 2;
+                  } else {
+                    id(thermostat_state) = 0;
+                  }
+                  // Turn off the thermostat
+                  auto call = id(therm).make_call();
+                  call.set_mode(climate::CLIMATE_MODE_OFF);
+                  call.perform();
+            else:
+              # Restore the thermostat to its previous state
+              - lambda: |-
+                  if (id(thermostat_state) == 1) {
+                    auto call = id(therm).make_call();
+                    call.set_mode(climate::CLIMATE_MODE_HEAT);
+                    call.perform();
+                  } else if (id(thermostat_state) == 2) {
+                    auto call = id(therm).make_call();
+                    call.set_mode(climate::CLIMATE_MODE_COOL);
+                    call.perform();
+                  }
